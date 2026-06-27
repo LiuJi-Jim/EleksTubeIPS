@@ -43,19 +43,19 @@ public:
 
     IPSClock();
 
-    static IntConfigItem& getTimeOrDate() { static IntConfigItem time_or_date("time_or_date", TIME); return time_or_date; }	// time
-    static ByteConfigItem& getDateFormat() { static ByteConfigItem date_format("date_format", USA); return date_format; }			// mm-dd-yy, dd-mm-yy, yy-mm-dd
-    static ByteConfigItem& getSlideTransition() { static ByteConfigItem slide_transition("slide_transition", 0); return slide_transition; }	// 0 == random
-    static BooleanConfigItem& getHourFormat() { static BooleanConfigItem hour_format("hour_format", true); return hour_format; }	// 12/24 hour
-    static ByteConfigItem& getFourDigitDisplay() { static ByteConfigItem four_digit_display("four_digit_display", FOUR_WITH_WEATHER); return four_digit_display; }	// 6 or 4 digit clock or 4 digits + weather
-    static BooleanConfigItem& getLeadingZero() { static BooleanConfigItem leading_zero("leading_zero", true); return leading_zero; }	//
+    static IntConfigItem& getTimeOrDate() { static IntConfigItem time_or_date("time_or_date", TIME); return time_or_date; }
+    static ByteConfigItem& getDateFormat() { static ByteConfigItem date_format("date_format", USA); return date_format; }
+    static ByteConfigItem& getSlideTransition() { static ByteConfigItem slide_transition("slide_transition", 0); return slide_transition; }
+    static BooleanConfigItem& getHourFormat() { static BooleanConfigItem hour_format("hour_format", true); return hour_format; }
+    static ByteConfigItem& getFourDigitDisplay() { static ByteConfigItem four_digit_display("four_digit_display", FOUR_WITH_WEATHER); return four_digit_display; }
+    static BooleanConfigItem& getLeadingZero() { static BooleanConfigItem leading_zero("leading_zero", true); return leading_zero; }
     static ByteConfigItem& getDisplayOn() { static ByteConfigItem display_on("display_on", 0); return display_on; }
     static ByteConfigItem& getDisplayOff() { static ByteConfigItem display_off("display_off", 24); return display_off; }
-    static StringConfigItem& getClockFace() { static StringConfigItem clock_face("clock_face", 25, "original"); return clock_face; }	// <clock_face>.tar.gz, max length is 31
-    static StringConfigItem& getTimeZone() { static StringConfigItem time_zone("time_zone", 63, "EST5EDT,M3.2.0,M11.1.0"); return time_zone; }	// POSIX timezone format
+    static StringConfigItem& getClockFace() { static StringConfigItem clock_face("clock_face", 25, "original"); return clock_face; }
+    static StringConfigItem& getTimeZone() { static StringConfigItem time_zone("time_zone", 63, "EST5EDT,M3.2.0,M11.1.0"); return time_zone; }
     static IntConfigItem& getDimming() { static IntConfigItem dimming("dimming", MATRIX); return dimming; }
     static ByteConfigItem& getBrightnessConfig() { static ByteConfigItem brightness_config("brightness_config", 255); return brightness_config; }
-    static StringConfigItem& getCustomData() { static StringConfigItem custom_data("custom_data", 10, ""); return custom_data; }	// Custom data for MQTT
+    static StringConfigItem& getCustomData() { static StringConfigItem custom_data("custom_data", 10, ""); return custom_data; }
 
     static const char* getLiveImageDir();
     static String getLiveSlotPath(uint8_t slot);
@@ -65,9 +65,6 @@ public:
     static uint32_t getLiveSlotVersion(uint8_t slot);
     static void markLiveSlotDirty(uint8_t slot);
     static bool ensureLiveSlotCache(uint8_t slot);
-    static const char* getDisplayPresetName();
-    static const char* getTimeOrDateName();
-    static const char* getFourDigitDisplayName();
     static bool setDisplayPreset(const String& preset);
 
     void init();
