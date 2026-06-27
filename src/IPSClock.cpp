@@ -7,18 +7,8 @@ extern void broadcastFSChange();
 
 namespace {
     const char *LIVE_IMAGE_DIR = "/ips/live";
-    const char *LIVE_IMAGE_CACHE_PREFIX = "/ips/cache/live";
-    const uint32_t INVALID_LIVE_SLOT_VERSION = 0xffffffff;
 
     uint32_t liveSlotVersion[IPSClock::LIVE_SLOT_COUNT] = {0, 0, 0, 0, 0, 0};
-    uint32_t cachedLiveSlotVersion[IPSClock::LIVE_SLOT_COUNT] = {
-        INVALID_LIVE_SLOT_VERSION,
-        INVALID_LIVE_SLOT_VERSION,
-        INVALID_LIVE_SLOT_VERSION,
-        INVALID_LIVE_SLOT_VERSION,
-        INVALID_LIVE_SLOT_VERSION,
-        INVALID_LIVE_SLOT_VERSION
-    };
 
     const uint8_t LEFT_TO_RIGHT_DIGITS[IPSClock::LIVE_SLOT_COUNT] = {
         HOURS_TENS,
@@ -29,44 +19,10 @@ namespace {
         SECONDS_ONES
     };
 
-    bool copyFile(const String& srcPath, const String& dstPath) {
-        fs::File src = LittleFS.open(srcPath, "r");
-        if (!src) {
-            LittleFS.remove(dstPath);
-            return false;
-        }
-
-        fs::File dst = LittleFS.open(dstPath, "w", true);
-        if (!dst) {
-            src.close();
-            return false;
-        }
-
-        uint8_t buffer[512];
-        while (src.available()) {
-            size_t readLen = src.read(buffer, sizeof(buffer));
-            if (readLen == 0) {
-                break;
-            }
-            if (dst.write(buffer, readLen) != readLen) {
-                src.close();
-                dst.close();
-                LittleFS.remove(dstPath);
-                return false;
-            }
-        }
-
-        src.close();
-        dst.close();
-        return true;
-    }
-
     void drawLiveSlot(uint8_t physicalDigit, uint8_t liveSlot, TFTs::show_t show = TFTs::yes) {
         if (!IPSClock::isValidLiveSlot(liveSlot)) {
             return;
         }
-
-        IPSClock::ensureLiveSlotCache(liveSlot);
 
         char name[8];
         snprintf(name, sizeof(name), "live%u", liveSlot);
@@ -98,10 +54,6 @@ String IPSClock::getLiveSlotPath(uint8_t slot) {
     return String(LIVE_IMAGE_DIR) + "/" + String(slot) + ".bmp";
 }
 
-String IPSClock::getLiveSlotCachePath(uint8_t slot) {
-    return String(LIVE_IMAGE_CACHE_PREFIX) + String(slot) + ".bmp";
-}
-
 bool IPSClock::ensureLiveImageDir(fs::FS& fs) {
     if (!fs.exists("/ips")) {
         fs.mkdir("/ips");
@@ -128,32 +80,6 @@ void IPSClock::markLiveSlotDirty(uint8_t slot) {
     if (liveSlotVersion[slot] == 0) {
         liveSlotVersion[slot] = 1;
     }
-    cachedLiveSlotVersion[slot] = INVALID_LIVE_SLOT_VERSION;
-}
-
-bool IPSClock::ensureLiveSlotCache(uint8_t slot) {
-    if (!isValidLiveSlot(slot)) {
-        return false;
-    }
-
-    String srcPath = getLiveSlotPath(slot);
-    String dstPath = getLiveSlotCachePath(slot);
-
-    if (!LittleFS.exists(srcPath)) {
-        LittleFS.remove(dstPath);
-        cachedLiveSlotVersion[slot] = liveSlotVersion[slot];
-        return false;
-    }
-
-    if (cachedLiveSlotVersion[slot] == liveSlotVersion[slot] && LittleFS.exists(dstPath)) {
-        return true;
-    }
-
-    bool copied = copyFile(srcPath, dstPath);
-    if (copied) {
-        cachedLiveSlotVersion[slot] = liveSlotVersion[slot];
-    }
-    return copied;
 }
 
 bool IPSClock::setDisplayPreset(const String& preset) {
@@ -216,9 +142,6 @@ void IPSClock::checkIconPack() {
         broadcastUpdate(getClockFace());
         broadcastFSChange();
         oldClockFace = getClockFace();
-        for (uint8_t slot = 0; slot < LIVE_SLOT_COUNT; slot++) {
-            cachedLiveSlotVersion[slot] = INVALID_LIVE_SLOT_VERSION;
-        }
         tfts->claim();
         tfts->invalidateAllDigits();
         tfts->release();
