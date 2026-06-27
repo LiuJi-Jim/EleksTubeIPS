@@ -6,7 +6,7 @@ extern void broadcastUpdate(const BaseConfigItem& item);
 extern void broadcastFSChange();
 
 namespace {
-    const char *LIVE_IMAGE_DIR = "/ips/live";
+    const char *LIVE_IMAGE_DIR = "/ips/cache";
 
     uint32_t liveSlotVersion[IPSClock::LIVE_SLOT_COUNT] = {0, 0, 0, 0, 0, 0};
 
@@ -51,7 +51,7 @@ const char* IPSClock::getLiveImageDir() {
 }
 
 String IPSClock::getLiveSlotPath(uint8_t slot) {
-    return String(LIVE_IMAGE_DIR) + "/" + String(slot) + ".bmp";
+    return String(LIVE_IMAGE_DIR) + "/live" + String(slot) + ".bmp";
 }
 
 bool IPSClock::ensureLiveImageDir(fs::FS& fs) {
