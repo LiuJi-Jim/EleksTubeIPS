@@ -106,13 +106,11 @@ void invalidateLiveDisplay(uint8_t slot) {
 }
 
 void sendPreset(AsyncWebServerRequest *request) {
-    String body = "{\"ok\":true,\"preset\":\"";
-    body += IPSClock::getDisplayPresetName();
-    body += "\",\"time_or_date\":\"";
-    body += IPSClock::getTimeOrDateName();
-    body += "\",\"four_digit_display\":\"";
-    body += IPSClock::getFourDigitDisplayName();
-    body += "\"}";
+    String body = "{\"ok\":true,\"time_or_date\":";
+    body += String(IPSClock::getTimeOrDate().value);
+    body += ",\"four_digit_display\":";
+    body += String(IPSClock::getFourDigitDisplay().value);
+    body += '}';
     request->send(200, "application/json", body);
 }
 
@@ -264,20 +262,6 @@ void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t l
         preset = "HHMM_WITH_TWO_LIVE_IMAGES";
     } else if (body.indexOf("SIX_LIVE_IMAGES") >= 0) {
         preset = "SIX_LIVE_IMAGES";
-    } else if (body.indexOf("TIME_SIX") >= 0) {
-        preset = "TIME_SIX";
-    } else if (body.indexOf("TIME_FOUR_WITH_WEATHER") >= 0) {
-        preset = "TIME_FOUR_WITH_WEATHER";
-    } else if (body.indexOf("TIME_FOUR_WITH_SLIDESHOW") >= 0) {
-        preset = "TIME_FOUR_WITH_SLIDESHOW";
-    } else if (body.indexOf("TIME_FOUR") >= 0) {
-        preset = "TIME_FOUR";
-    } else if (body.indexOf("DATE") >= 0) {
-        preset = "DATE";
-    } else if (body.indexOf("WEATHER") >= 0) {
-        preset = "WEATHER";
-    } else if (body.indexOf("SLIDE_SHOW") >= 0 || body.indexOf("SLIDESHOW") >= 0) {
-        preset = "SLIDE_SHOW";
     }
 
     if (preset == nullptr || !IPSClock::setDisplayPreset(String(preset))) {
