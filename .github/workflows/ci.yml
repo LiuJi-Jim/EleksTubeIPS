@@ -35,11 +35,11 @@ jobs:
           pio run -e elekstubev1 -t buildfs > ci-logs/elekstubev1-buildfs.log 2>&1 || status=1
           pio run -e elekstubev2 > ci-logs/elekstubev2-firmware.log 2>&1 || status=1
           pio run -e elekstubev2 -t buildfs > ci-logs/elekstubev2-buildfs.log 2>&1 || status=1
-          if [ -d test ]; then
+          if find test -type f \( -name '*.cpp' -o -name '*.c' -o -name '*.ino' \) | grep -q .; then
             pio test -e elekstubev1 > ci-logs/elekstubev1-test.log 2>&1 || status=1
             pio test -e elekstubev2 > ci-logs/elekstubev2-test.log 2>&1 || status=1
           else
-            echo "No test directory; skipping PlatformIO tests." > ci-logs/tests.log
+            echo "No PlatformIO test suites; skipping tests." > ci-logs/tests.log
           fi
           for file in ci-logs/*.log; do
             echo "===== ${file} ====="
