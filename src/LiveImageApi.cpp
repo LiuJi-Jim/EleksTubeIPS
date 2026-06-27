@@ -11,15 +11,10 @@ extern void broadcastFSChange();
 
 namespace {
 const size_t MAX_LIVE_IMAGE_BYTES = 256 * 1024;
-
-bool uploadInProgress[IPSClock::LIVE_SLOT_COUNT] = {false, false, false, false, false, false};
 bool uploadFailed[IPSClock::LIVE_SLOT_COUNT] = {false, false, false, false, false, false};
 size_t uploadWritten[IPSClock::LIVE_SLOT_COUNT] = {0, 0, 0, 0, 0, 0};
 
 bool parseSlot(AsyncWebServerRequest *request, uint8_t &slot) {
-    if (request->pathArg(0).length() == 0) {
-        return false;
-    }
     int parsed = request->pathArg(0).toInt();
     if (parsed < 0 || parsed >= IPSClock::LIVE_SLOT_COUNT) {
         return false;
@@ -28,23 +23,11 @@ bool parseSlot(AsyncWebServerRequest *request, uint8_t &slot) {
     return true;
 }
 
-void sendError(AsyncWebServerRequest *request, int code, const char *error, const char *message) {
+void sendError(AsyncWebServerRequest *request, int code, const char *error) {
     String body = "{\"ok\":false,\"error\":\"";
     body += error;
-    body += "\",\"message\":\"";
-    body += message;
     body += "\"}";
     request->send(code, "application/json", body);
-}
-
-size_t fileSize(const String& path) {
-    fs::File file = LittleFS.open(path, "r");
-    if (!file) {
-        return 0;
-    }
-    size_t size = file.size();
-    file.close();
-    return size;
 }
 
 bool isBmpHeaderValid(const String& path) {
@@ -53,38 +36,23 @@ bool isBmpHeaderValid(const String& path) {
         return false;
     }
 
-    uint8_t header[30];
-    size_t readLen = file.read(header, sizeof(header));
+    uint8_t h[30];
+    size_t readLen = file.read(h, sizeof(h));
     file.close();
-    if (readLen < sizeof(header)) {
+    if (readLen < sizeof(h) || h[0] != 'B' || h[1] != 'M') {
         return false;
     }
 
-    if (header[0] != 'B' || header[1] != 'M') {
-        return false;
-    }
+    int32_t width = static_cast<int32_t>(h[18]) | (static_cast<int32_t>(h[19]) << 8) |
+                    (static_cast<int32_t>(h[20]) << 16) | (static_cast<int32_t>(h[21]) << 24);
+    int32_t height = static_cast<int32_t>(h[22]) | (static_cast<int32_t>(h[23]) << 8) |
+                     (static_cast<int32_t>(h[24]) << 16) | (static_cast<int32_t>(h[25]) << 24);
+    uint16_t planes = static_cast<uint16_t>(h[26]) | (static_cast<uint16_t>(h[27]) << 8);
+    uint16_t bitDepth = static_cast<uint16_t>(h[28]) | (static_cast<uint16_t>(h[29]) << 8);
+    height = height < 0 ? -height : height;
 
-    int32_t width = static_cast<int32_t>(header[18]) |
-                    (static_cast<int32_t>(header[19]) << 8) |
-                    (static_cast<int32_t>(header[20]) << 16) |
-                    (static_cast<int32_t>(header[21]) << 24);
-    int32_t height = static_cast<int32_t>(header[22]) |
-                     (static_cast<int32_t>(header[23]) << 8) |
-                     (static_cast<int32_t>(header[24]) << 16) |
-                     (static_cast<int32_t>(header[25]) << 24);
-    uint16_t planes = static_cast<uint16_t>(header[26]) |
-                      (static_cast<uint16_t>(header[27]) << 8);
-    uint16_t bitDepth = static_cast<uint16_t>(header[28]) |
-                        (static_cast<uint16_t>(header[29]) << 8);
-
-    if (planes != 1) {
-        return false;
-    }
-    int32_t absoluteHeight = height < 0 ? -height : height;
-    if (absoluteHeight != TFT_HEIGHT || width != TFT_WIDTH) {
-        return false;
-    }
-    return bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 || bitDepth == 16 || bitDepth == 24;
+    return planes == 1 && width == TFT_WIDTH && height == TFT_HEIGHT &&
+           (bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 || bitDepth == 16 || bitDepth == 24);
 }
 
 void invalidateLiveDisplay(uint8_t slot) {
@@ -92,13 +60,9 @@ void invalidateLiveDisplay(uint8_t slot) {
     if (tfts == nullptr) {
         return;
     }
-
-    bool visible = IPSClock::getTimeOrDate().value == IPSClock::LIVE_IMAGES ||
+    if (IPSClock::getTimeOrDate().value == IPSClock::LIVE_IMAGES ||
         (IPSClock::getTimeOrDate().value == IPSClock::TIME &&
-         IPSClock::getFourDigitDisplay().value == IPSClock::FOUR_WITH_TWO_LIVE_IMAGES &&
-         slot >= 4);
-
-    if (visible) {
+         IPSClock::getFourDigitDisplay().value == IPSClock::FOUR_WITH_TWO_LIVE_IMAGES && slot >= 4)) {
         tfts->claim();
         tfts->invalidateAllDigits();
         tfts->release();
@@ -117,17 +81,11 @@ void sendPreset(AsyncWebServerRequest *request) {
 void handleGetSlots(AsyncWebServerRequest *request) {
     String body = "{\"ok\":true,\"slots\":[";
     for (uint8_t slot = 0; slot < IPSClock::LIVE_SLOT_COUNT; slot++) {
-        if (slot != 0) {
-            body += ',';
-        }
-        String path = IPSClock::getLiveSlotPath(slot);
-        bool exists = LittleFS.exists(path);
+        if (slot != 0) body += ',';
         body += "{\"slot\":";
         body += String(slot);
         body += ",\"exists\":";
-        body += exists ? "true" : "false";
-        body += ",\"size\":";
-        body += String(exists ? fileSize(path) : 0);
+        body += LittleFS.exists(IPSClock::getLiveSlotPath(slot)) ? "true" : "false";
         body += ",\"version\":";
         body += String(IPSClock::getLiveSlotVersion(slot));
         body += '}';
@@ -136,48 +94,24 @@ void handleGetSlots(AsyncWebServerRequest *request) {
     request->send(200, "application/json", body);
 }
 
-void handleGetImage(AsyncWebServerRequest *request) {
-    uint8_t slot;
-    if (!parseSlot(request, slot)) {
-        sendError(request, 400, "invalid_slot", "slot must be 0..5");
-        return;
-    }
-
-    String path = IPSClock::getLiveSlotPath(slot);
-    if (!LittleFS.exists(path)) {
-        sendError(request, 404, "not_found", "live image slot is empty");
-        return;
-    }
-
-    request->send(LittleFS, path, "image/bmp");
-}
-
 void handleDeleteImage(AsyncWebServerRequest *request) {
     uint8_t slot;
     if (!parseSlot(request, slot)) {
-        sendError(request, 400, "invalid_slot", "slot must be 0..5");
+        sendError(request, 400, "invalid_slot");
         return;
     }
 
-    String path = IPSClock::getLiveSlotPath(slot);
-    String cachePath = IPSClock::getLiveSlotCachePath(slot);
-    LittleFS.remove(path);
-    LittleFS.remove(cachePath);
+    LittleFS.remove(IPSClock::getLiveSlotPath(slot));
+    LittleFS.remove(IPSClock::getLiveSlotCachePath(slot));
     invalidateLiveDisplay(slot);
     broadcastFSChange();
-
-    String body = "{\"ok\":true,\"slot\":";
-    body += String(slot);
-    body += ",\"exists\":false,\"version\":";
-    body += String(IPSClock::getLiveSlotVersion(slot));
-    body += '}';
-    request->send(200, "application/json", body);
+    request->send(200, "application/json", "{\"ok\":true}");
 }
 
 void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     uint8_t slot;
     if (!parseSlot(request, slot)) {
-        sendError(request, 400, "invalid_slot", "slot must be 0..5");
+        sendError(request, 400, "invalid_slot");
         return;
     }
 
@@ -186,14 +120,9 @@ void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 
     if (index == 0) {
         IPSClock::ensureLiveImageDir(LittleFS);
-        uploadInProgress[slot] = true;
         uploadFailed[slot] = false;
         uploadWritten[slot] = 0;
         LittleFS.remove(tmpPath);
-    }
-
-    if (!uploadInProgress[slot]) {
-        uploadFailed[slot] = true;
     }
 
     if (!uploadFailed[slot]) {
@@ -201,62 +130,38 @@ void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len,
             uploadFailed[slot] = true;
         } else {
             fs::File file = LittleFS.open(tmpPath, index == 0 ? "w" : "a", true);
-            if (!file) {
+            if (!file || (len > 0 && file.write(data, len) != len)) {
                 uploadFailed[slot] = true;
-            } else {
-                if (len > 0 && file.write(data, len) != len) {
-                    uploadFailed[slot] = true;
-                }
-                file.close();
             }
+            if (file) file.close();
         }
     }
-
     uploadWritten[slot] += len;
+    if (index + len < total) return;
 
-    if (index + len < total) {
-        return;
-    }
-
-    bool ok = !uploadFailed[slot] && isBmpHeaderValid(tmpPath);
-    uploadInProgress[slot] = false;
-
-    if (!ok) {
+    if (uploadFailed[slot] || !isBmpHeaderValid(tmpPath)) {
         LittleFS.remove(tmpPath);
-        sendError(request, 400, "invalid_bmp", "expected 135x240 BMP under 256KB");
+        sendError(request, 400, "invalid_bmp");
         return;
     }
 
     LittleFS.remove(finalPath);
     if (!LittleFS.rename(tmpPath, finalPath)) {
         LittleFS.remove(tmpPath);
-        sendError(request, 500, "rename_failed", "failed to replace live image");
+        sendError(request, 500, "rename_failed");
         return;
     }
 
     invalidateLiveDisplay(slot);
     broadcastFSChange();
-
-    String body = "{\"ok\":true,\"slot\":";
-    body += String(slot);
-    body += ",\"size\":";
-    body += String(uploadWritten[slot]);
-    body += ",\"version\":";
-    body += String(IPSClock::getLiveSlotVersion(slot));
-    body += '}';
-    request->send(200, "application/json", body);
+    request->send(200, "application/json", "{\"ok\":true}");
 }
 
 void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    if (index + len < total) {
-        return;
-    }
+    if (index + len < total) return;
 
     String body;
-    for (size_t i = 0; i < len; i++) {
-        body += static_cast<char>(data[i]);
-    }
-
+    for (size_t i = 0; i < len; i++) body += static_cast<char>(data[i]);
     const char *preset = nullptr;
     if (body.indexOf("HHMM_WITH_TWO_LIVE_IMAGES") >= 0) {
         preset = "HHMM_WITH_TWO_LIVE_IMAGES";
@@ -265,7 +170,7 @@ void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t l
     }
 
     if (preset == nullptr || !IPSClock::setDisplayPreset(String(preset))) {
-        sendError(request, 400, "invalid_preset", "unknown display preset");
+        sendError(request, 400, "invalid_preset");
         return;
     }
 
@@ -278,20 +183,15 @@ void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t l
         tfts->invalidateAllDigits();
         tfts->release();
     }
-
     sendPreset(request);
 }
 }
 
 void configureLiveImageApi(AsyncWebServer *server) {
-    if (server == nullptr) {
-        return;
-    }
+    if (server == nullptr) return;
     server->on("/api/live/slots", HTTP_GET, handleGetSlots);
-    server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_GET, handleGetImage);
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_DELETE, handleDeleteImage);
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_PUT, [](AsyncWebServerRequest *request) {}, nullptr, handleUploadBody);
-    server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr, handleUploadBody);
     server->on("/api/display/preset", HTTP_GET, sendPreset);
     server->on("/api/display/preset", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr, handleSetPresetBody);
 }
