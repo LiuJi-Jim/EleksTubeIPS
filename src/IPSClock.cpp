@@ -156,71 +156,12 @@ bool IPSClock::ensureLiveSlotCache(uint8_t slot) {
     return copied;
 }
 
-const char* IPSClock::getTimeOrDateName() {
-    switch (getTimeOrDate().value) {
-        case TIME: return "TIME";
-        case DATE: return "DATE";
-        case WEATHER: return "WEATHER";
-        case SLIDE_SHOW: return "SLIDE_SHOW";
-        case LIVE_IMAGES: return "LIVE_IMAGES";
-        default: return "UNKNOWN";
-    }
-}
-
-const char* IPSClock::getFourDigitDisplayName() {
-    switch (getFourDigitDisplay().value) {
-        case SIX: return "SIX";
-        case FOUR: return "FOUR";
-        case FOUR_WITH_WEATHER: return "FOUR_WITH_WEATHER";
-        case FOUR_WITH_SLIDESHOW: return "FOUR_WITH_SLIDESHOW";
-        case FOUR_WITH_TWO_LIVE_IMAGES: return "FOUR_WITH_TWO_LIVE_IMAGES";
-        default: return "UNKNOWN";
-    }
-}
-
-const char* IPSClock::getDisplayPresetName() {
-    switch (getTimeOrDate().value) {
-        case TIME:
-            switch (getFourDigitDisplay().value) {
-                case SIX: return "TIME_SIX";
-                case FOUR: return "TIME_FOUR";
-                case FOUR_WITH_WEATHER: return "TIME_FOUR_WITH_WEATHER";
-                case FOUR_WITH_SLIDESHOW: return "TIME_FOUR_WITH_SLIDESHOW";
-                case FOUR_WITH_TWO_LIVE_IMAGES: return "HHMM_WITH_TWO_LIVE_IMAGES";
-                default: return "TIME_UNKNOWN";
-            }
-        case DATE: return "DATE";
-        case WEATHER: return "WEATHER";
-        case SLIDE_SHOW: return "SLIDE_SHOW";
-        case LIVE_IMAGES: return "SIX_LIVE_IMAGES";
-        default: return "UNKNOWN";
-    }
-}
-
 bool IPSClock::setDisplayPreset(const String& preset) {
     if (preset == "HHMM_WITH_TWO_LIVE_IMAGES") {
         getTimeOrDate().value = TIME;
         getFourDigitDisplay().value = FOUR_WITH_TWO_LIVE_IMAGES;
     } else if (preset == "SIX_LIVE_IMAGES") {
         getTimeOrDate().value = LIVE_IMAGES;
-    } else if (preset == "TIME_SIX") {
-        getTimeOrDate().value = TIME;
-        getFourDigitDisplay().value = SIX;
-    } else if (preset == "TIME_FOUR") {
-        getTimeOrDate().value = TIME;
-        getFourDigitDisplay().value = FOUR;
-    } else if (preset == "TIME_FOUR_WITH_WEATHER") {
-        getTimeOrDate().value = TIME;
-        getFourDigitDisplay().value = FOUR_WITH_WEATHER;
-    } else if (preset == "TIME_FOUR_WITH_SLIDESHOW") {
-        getTimeOrDate().value = TIME;
-        getFourDigitDisplay().value = FOUR_WITH_SLIDESHOW;
-    } else if (preset == "DATE") {
-        getTimeOrDate().value = DATE;
-    } else if (preset == "WEATHER") {
-        getTimeOrDate().value = WEATHER;
-    } else if (preset == "SLIDE_SHOW" || preset == "SLIDESHOW") {
-        getTimeOrDate().value = SLIDE_SHOW;
     } else {
         return false;
     }
@@ -287,7 +228,7 @@ void IPSClock::checkIconPack() {
 void IPSClock::drawHHMMWithTwoLiveImages(struct tm& now) {
     uint8_t hour = now.tm_hour;
 
-    if (getHourFormat()) {  // true = 12 hour display
+    if (getHourFormat()) {
         if (now.tm_hour > 12) {
             hour = now.tm_hour - 12;
         } else if (now.tm_hour == 0) {
@@ -316,14 +257,13 @@ void IPSClock::drawSixLiveImages() {
 void IPSClock::loop() {
     unsigned long nowMs = millis();
 
-    // display refresh
     if (displayTimer.expired(nowMs)) {
         struct tm now;
         suseconds_t uSec;
         pTimeSync->getLocalTime(&now, &uSec);
         suseconds_t realms = uSec / 1000;
         if (realms > 1000) {
-            realms = realms % 1000;	// Something went wrong so pick a safe number for 1000 - realms...
+            realms = realms % 1000;
         }
         unsigned long tDelay = 1000 - realms;
 
@@ -334,19 +274,14 @@ void IPSClock::loop() {
             tfts->setBox(tfts->width(), tfts->height());
             tfts->checkStatus();
             tfts->enableAllDisplays();
-            // tfts->invalidateAllDigits();
 
-            // Display custom data if available: 
             uint8_t customDataLength = getCustomData().value.length();
             if (customDataLength > 0) {
                 for (uint8_t i = 0; i < NUM_DIGITS; i++) {
                     char name[10];
-                    // no letter found for this digit -> use space
                     if (i >= customDataLength) {
                         strcpy(name, "space");
-                    }
-                    else 
-                    {
+                    } else {
                         char value = getCustomData().value[i];
                         if (value == '_' or value == ' ') {
                             strcpy(name, "space");
@@ -359,9 +294,7 @@ void IPSClock::loop() {
                         } else if (value >= '0' && value <= '9') {
                             name[0] = value;
                             name[1] = 0;
-                        } 
-                        // not a digit colon or space -> show as space
-                        else {
+                        } else {
                             strcpy(name, "space");
                         }
 
@@ -376,23 +309,19 @@ void IPSClock::loop() {
                     };
                     tfts->setDigit(DIGITS[i], name, TFTs::yes);
                 }
-            }
-            // Display time: 
-            else if (getTimeOrDate().value == TIME) {
+            } else if (getTimeOrDate().value == TIME) {
                 uint8_t hour = now.tm_hour;
 
                 if (getFourDigitDisplay() == FOUR_WITH_TWO_LIVE_IMAGES) {
                     drawHHMMWithTwoLiveImages(now);
-                }
-                // refresh starting on seconds
-                else if (getFourDigitDisplay() == SIX) {
+                } else if (getFourDigitDisplay() == SIX) {
                     tfts->setDigit(SECONDS_ONES, digitToName[now.tm_sec % 10], TFTs::yes);
                     tfts->setDigit(SECONDS_TENS, digitToName[now.tm_sec / 10], TFTs::yes);
                     tfts->setDigit(MINUTES_ONES, digitToName[now.tm_min % 10], TFTs::yes);
                     tfts->setDigit(MINUTES_TENS, digitToName[now.tm_min / 10], TFTs::yes);
                 } else {
                     if (getFourDigitDisplay() == FOUR) {
-                        if (getHourFormat()) {  // true == show am/pm indicator
+                        if (getHourFormat()) {
                             tfts->setDigit(SECONDS_ONES, hour < 12 ? "am" : "pm", TFTs::yes);
                         } else {
                             tfts->setDigit(SECONDS_ONES, "space", TFTs::yes);
@@ -412,7 +341,7 @@ void IPSClock::loop() {
                 }
 
                 if (getFourDigitDisplay() != FOUR_WITH_TWO_LIVE_IMAGES) {
-                    if (getHourFormat()) {  // true = 12 hour display
+                    if (getHourFormat()) {
                         if (now.tm_hour > 12) {
                             hour = now.tm_hour - 12;
                         } else if (now.tm_hour == 0) {
@@ -428,27 +357,24 @@ void IPSClock::loop() {
                         tfts->setDigit(HOURS_TENS, digitToName[hour / 10], TFTs::yes);
                     }
                 }
-            } 
-            // Display Date: 
-            else if (getTimeOrDate().value == DATE) {
+            } else if (getTimeOrDate().value == DATE) {
                 uint8_t day = now.tm_mday;
                 uint8_t month = now.tm_mon;
                 uint8_t year = now.tm_year;
 
                 switch (getDateFormat().value) {
-                case EURO:	// DD-MM-YY
+                case EURO:
                     break;
-                case USA: // MM-DD-YY
+                case USA:
                     day = now.tm_mon;
                     month = now.tm_mday;
                     break;
-                default: // YY-MM-DD
+                default:
                     day = now.tm_year;
                     year = now.tm_mday;
                     break;
                 }
 
-                // refresh starting on 'seconds'
                 tfts->setDigit(SECONDS_ONES, digitToName[year % 10], TFTs::yes);
                 tfts->setDigit(SECONDS_TENS, digitToName[year / 10], TFTs::yes);
                 tfts->setDigit(MINUTES_ONES, digitToName[month % 10], TFTs::yes);
