@@ -1,0 +1,99 @@
+<div data-role="page" id="LiveImages">
+  <div data-role="header" data-position="fixed">
+    <h1>Live Images</h1>
+    <a href="#mainMenu" data-rel="main-menu-panel" class="ui-btn ui-btn-left ui-btn-icon-notext ui-icon-bars ui-corner-all"></a>
+  </div>
+  <div data-role="content">
+    <p>Upload one 135 x 240 BMP image per physical screen.</p>
+    <div>
+      <button onclick="setLivePreset('HHMM_WITH_TWO_LIVE_IMAGES')">Show HHMM + 2 Live Images</button>
+      <button onclick="setLivePreset('SIX_LIVE_IMAGES')">Show 6 Live Images</button>
+      <button onclick="loadLiveSlots()">Refresh</button>
+    </div>
+    <div id="live_images_status"></div>
+    <div id="live_images_slots"></div>
+    <script>
+      function liveImageMessage(message) {
+        document.getElementById('live_images_status').textContent = message;
+      }
+
+      function liveSlotHtml(slot) {
+        var preview = slot.exists
+          ? '<img src="/api/live/slots/' + slot.slot + '/image?v=' + slot.version + '" style="width:67px;height:120px;border:1px solid #aaa;background:#000;">'
+          : '<div style="width:67px;height:120px;border:1px solid #aaa;background:#000;color:#fff;text-align:center;line-height:120px;">empty</div>';
+        return '<div style="display:inline-block;vertical-align:top;width:96px;margin:4px;text-align:center;">' +
+          '<div><strong>Slot ' + slot.slot + '</strong></div>' + preview +
+          '<div style="font-size:11px;">' + (slot.exists ? slot.size + ' bytes' : 'empty') + '</div>' +
+          '<input type="file" accept="image/bmp,.bmp" id="live_file_' + slot.slot + '">' +
+          '<button onclick="uploadLiveSlot(' + slot.slot + ')">Upload</button>' +
+          '<button onclick="clearLiveSlot(' + slot.slot + ')">Clear</button>' +
+          '</div>';
+      }
+
+      function loadLiveSlots() {
+        fetch('/api/live/slots').then(function(response) { return response.json(); }).then(function(data) {
+          if (!data.ok) {
+            liveImageMessage('Failed to load slots');
+            return;
+          }
+          var html = '';
+          for (var i = 0; i < data.slots.length; i++) {
+            html += liveSlotHtml(data.slots[i]);
+          }
+          document.getElementById('live_images_slots').innerHTML = html;
+          liveImageMessage('Live image slots loaded');
+        }).catch(function() {
+          liveImageMessage('Live image API unavailable');
+        });
+      }
+
+      function uploadLiveSlot(slot) {
+        var file = document.getElementById('live_file_' + slot).files[0];
+        if (!file) {
+          alert('Choose a BMP file first');
+          return;
+        }
+        liveImageMessage('Uploading slot ' + slot + '...');
+        fetch('/api/live/slots/' + slot + '/image', {
+          method: 'PUT',
+          headers: {'Content-Type': 'image/bmp'},
+          body: file
+        }).then(function(response) {
+          if (!response.ok) throw new Error('Upload failed');
+          liveImageMessage('Uploaded slot ' + slot);
+          loadLiveSlots();
+        }).catch(function(error) {
+          liveImageMessage(error.message);
+          alert(error.message);
+        });
+      }
+
+      function clearLiveSlot(slot) {
+        fetch('/api/live/slots/' + slot + '/image', {method: 'DELETE'}).then(function(response) {
+          if (!response.ok) throw new Error('Clear failed');
+          liveImageMessage('Cleared slot ' + slot);
+          loadLiveSlots();
+        }).catch(function(error) {
+          liveImageMessage(error.message);
+        });
+      }
+
+      function setLivePreset(preset) {
+        fetch('/api/display/preset', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({preset: preset})
+        }).then(function(response) {
+          if (!response.ok) throw new Error('Preset update failed');
+          liveImageMessage('Display preset set: ' + preset);
+        }).catch(function(error) {
+          liveImageMessage(error.message);
+          alert(error.message);
+        });
+      }
+
+      document.addEventListener('pageshow', loadLiveSlots);
+      setTimeout(loadLiveSlots, 0);
+    </script>
+  </div>
+</div>
