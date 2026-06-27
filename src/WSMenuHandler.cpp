@@ -3,6 +3,7 @@
 const char* WSMenuHandler::clockMenu = "{\"1\": { \"url\" : \"clock.html\", \"title\" : \"Clock\" }}";
 const char* WSMenuHandler::ledsMenu = "{\"2\": { \"url\" : \"leds.html\", \"title\" : \"LEDs\" }}";
 const char* WSMenuHandler::facesMenu = "{\"3\": { \"url\" : \"faces.html\", \"title\" : \"Files\" }}";
+const char* WSMenuHandler::liveImagesMenu = "{\"9\": { \"url\" : \"live_images.html\", \"title\" : \"Live Images\" }}";
 const char* WSMenuHandler::mqttMenu = "{\"4\": { \"url\" : \"mqtt.html\", \"title\" : \"MQTT\" }}";
 const char* WSMenuHandler::infoMenu = "{\"5\": { \"url\" : \"info.html\", \"title\" : \"Info\" }}";
 const char* WSMenuHandler::networkMenu = "{\"6\": { \"url\" : \"network.html\", \"title\" : \"Network\" }}";
@@ -22,4 +23,3 @@ void WSMenuHandler::handle(AsyncWebSocketClient *client, char *data) {
 void WSMenuHandler::setItems(const char **items) {
 	this->items = items;
 }
-
