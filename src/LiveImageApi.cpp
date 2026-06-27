@@ -1,6 +1,5 @@
 #include "LiveImageApi.h"
 
-#include <ArduinoJson.h>
 #include <LittleFS.h>
 
 #include "IPSClock.h"
@@ -29,18 +28,13 @@ bool parseSlot(AsyncWebServerRequest *request, uint8_t &slot) {
     return true;
 }
 
-void sendJson(AsyncWebServerRequest *request, int code, JsonDocument &doc) {
-    String body;
-    serializeJson(doc, body);
-    request->send(code, "application/json", body);
-}
-
 void sendError(AsyncWebServerRequest *request, int code, const char *error, const char *message) {
-    JsonDocument doc;
-    doc["ok"] = false;
-    doc["error"] = error;
-    doc["message"] = message;
-    sendJson(request, code, doc);
+    String body = "{\"ok\":false,\"error\":\"";
+    body += error;
+    body += "\",\"message\":\"";
+    body += message;
+    body += "\"}";
+    request->send(code, "application/json", body);
 }
 
 size_t fileSize(const String& path) {
@@ -111,20 +105,37 @@ void invalidateLiveDisplay(uint8_t slot) {
     }
 }
 
+void sendPreset(AsyncWebServerRequest *request) {
+    String body = "{\"ok\":true,\"preset\":\"";
+    body += IPSClock::getDisplayPresetName();
+    body += "\",\"time_or_date\":\"";
+    body += IPSClock::getTimeOrDateName();
+    body += "\",\"four_digit_display\":\"";
+    body += IPSClock::getFourDigitDisplayName();
+    body += "\"}";
+    request->send(200, "application/json", body);
+}
+
 void handleGetSlots(AsyncWebServerRequest *request) {
-    JsonDocument doc;
-    doc["ok"] = true;
-    JsonArray slots = doc["slots"].to<JsonArray>();
+    String body = "{\"ok\":true,\"slots\":[";
     for (uint8_t slot = 0; slot < IPSClock::LIVE_SLOT_COUNT; slot++) {
+        if (slot != 0) {
+            body += ',';
+        }
         String path = IPSClock::getLiveSlotPath(slot);
-        JsonObject item = slots.add<JsonObject>();
-        item["slot"] = slot;
         bool exists = LittleFS.exists(path);
-        item["exists"] = exists;
-        item["size"] = exists ? fileSize(path) : 0;
-        item["version"] = IPSClock::getLiveSlotVersion(slot);
+        body += "{\"slot\":";
+        body += String(slot);
+        body += ",\"exists\":";
+        body += exists ? "true" : "false";
+        body += ",\"size\":";
+        body += String(exists ? fileSize(path) : 0);
+        body += ",\"version\":";
+        body += String(IPSClock::getLiveSlotVersion(slot));
+        body += '}';
     }
-    sendJson(request, 200, doc);
+    body += "]}";
+    request->send(200, "application/json", body);
 }
 
 void handleGetImage(AsyncWebServerRequest *request) {
@@ -157,12 +168,12 @@ void handleDeleteImage(AsyncWebServerRequest *request) {
     invalidateLiveDisplay(slot);
     broadcastFSChange();
 
-    JsonDocument doc;
-    doc["ok"] = true;
-    doc["slot"] = slot;
-    doc["exists"] = false;
-    doc["version"] = IPSClock::getLiveSlotVersion(slot);
-    sendJson(request, 200, doc);
+    String body = "{\"ok\":true,\"slot\":";
+    body += String(slot);
+    body += ",\"exists\":false,\"version\":";
+    body += String(IPSClock::getLiveSlotVersion(slot));
+    body += '}';
+    request->send(200, "application/json", body);
 }
 
 void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -228,21 +239,14 @@ void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len,
     invalidateLiveDisplay(slot);
     broadcastFSChange();
 
-    JsonDocument doc;
-    doc["ok"] = true;
-    doc["slot"] = slot;
-    doc["size"] = uploadWritten[slot];
-    doc["version"] = IPSClock::getLiveSlotVersion(slot);
-    sendJson(request, 200, doc);
-}
-
-void handleGetPreset(AsyncWebServerRequest *request) {
-    JsonDocument doc;
-    doc["ok"] = true;
-    doc["preset"] = IPSClock::getDisplayPresetName();
-    doc["time_or_date"] = IPSClock::getTimeOrDateName();
-    doc["four_digit_display"] = IPSClock::getFourDigitDisplayName();
-    sendJson(request, 200, doc);
+    String body = "{\"ok\":true,\"slot\":";
+    body += String(slot);
+    body += ",\"size\":";
+    body += String(uploadWritten[slot]);
+    body += ",\"version\":";
+    body += String(IPSClock::getLiveSlotVersion(slot));
+    body += '}';
+    request->send(200, "application/json", body);
 }
 
 void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -250,15 +254,33 @@ void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t l
         return;
     }
 
-    JsonDocument body;
-    DeserializationError error = deserializeJson(body, data, len);
-    if (error || !body["preset"].is<const char*>()) {
-        sendError(request, 400, "invalid_json", "expected JSON body with preset");
-        return;
+    String body;
+    for (size_t i = 0; i < len; i++) {
+        body += static_cast<char>(data[i]);
     }
 
-    String preset = body["preset"].as<String>();
-    if (!IPSClock::setDisplayPreset(preset)) {
+    const char *preset = nullptr;
+    if (body.indexOf("HHMM_WITH_TWO_LIVE_IMAGES") >= 0) {
+        preset = "HHMM_WITH_TWO_LIVE_IMAGES";
+    } else if (body.indexOf("SIX_LIVE_IMAGES") >= 0) {
+        preset = "SIX_LIVE_IMAGES";
+    } else if (body.indexOf("TIME_SIX") >= 0) {
+        preset = "TIME_SIX";
+    } else if (body.indexOf("TIME_FOUR_WITH_WEATHER") >= 0) {
+        preset = "TIME_FOUR_WITH_WEATHER";
+    } else if (body.indexOf("TIME_FOUR_WITH_SLIDESHOW") >= 0) {
+        preset = "TIME_FOUR_WITH_SLIDESHOW";
+    } else if (body.indexOf("TIME_FOUR") >= 0) {
+        preset = "TIME_FOUR";
+    } else if (body.indexOf("DATE") >= 0) {
+        preset = "DATE";
+    } else if (body.indexOf("WEATHER") >= 0) {
+        preset = "WEATHER";
+    } else if (body.indexOf("SLIDE_SHOW") >= 0 || body.indexOf("SLIDESHOW") >= 0) {
+        preset = "SLIDE_SHOW";
+    }
+
+    if (preset == nullptr || !IPSClock::setDisplayPreset(String(preset))) {
         sendError(request, 400, "invalid_preset", "unknown display preset");
         return;
     }
@@ -273,12 +295,7 @@ void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t l
         tfts->release();
     }
 
-    JsonDocument doc;
-    doc["ok"] = true;
-    doc["preset"] = IPSClock::getDisplayPresetName();
-    doc["time_or_date"] = IPSClock::getTimeOrDateName();
-    doc["four_digit_display"] = IPSClock::getFourDigitDisplayName();
-    sendJson(request, 200, doc);
+    sendPreset(request);
 }
 }
 
@@ -291,7 +308,7 @@ void configureLiveImageApi(AsyncWebServer *server) {
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_DELETE, handleDeleteImage);
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_PUT, [](AsyncWebServerRequest *request) {}, nullptr, handleUploadBody);
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr, handleUploadBody);
-    server->on("/api/display/preset", HTTP_GET, handleGetPreset);
+    server->on("/api/display/preset", HTTP_GET, sendPreset);
     server->on("/api/display/preset", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr, handleSetPresetBody);
 }
 
