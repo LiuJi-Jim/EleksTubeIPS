@@ -6,6 +6,7 @@
 #include "IPSClock.h"
 #include "TFTs.h"
 
+extern AsyncWebServer *server;
 extern void broadcastUpdate(const BaseConfigItem& item);
 extern void broadcastFSChange();
 
@@ -282,7 +283,9 @@ void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t l
 }
 
 void configureLiveImageApi(AsyncWebServer *server) {
-    IPSClock::ensureLiveImageDir(LittleFS);
+    if (server == nullptr) {
+        return;
+    }
     server->on("/api/live/slots", HTTP_GET, handleGetSlots);
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_GET, handleGetImage);
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_DELETE, handleDeleteImage);
@@ -290,4 +293,8 @@ void configureLiveImageApi(AsyncWebServer *server) {
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr, handleUploadBody);
     server->on("/api/display/preset", HTTP_GET, handleGetPreset);
     server->on("/api/display/preset", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr, handleSetPresetBody);
+}
+
+void initVariant() {
+    configureLiveImageApi(server);
 }
