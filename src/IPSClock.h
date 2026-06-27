@@ -3,6 +3,7 @@
 
 #include <ConfigItem.h>
 #include <TimeSync.h>
+#include <FS.h>
 
 #include "ClockTimer.h"
 #include "ImageUnpacker.h"
@@ -14,7 +15,8 @@ public:
         TIME = 0,
         DATE,
         WEATHER,
-        SLIDE_SHOW
+        SLIDE_SHOW,
+        LIVE_IMAGES
     };
 
     enum Dimming {
@@ -33,8 +35,11 @@ public:
         SIX = 0,
         FOUR,
         FOUR_WITH_WEATHER,
-        FOUR_WITH_SLIDESHOW
+        FOUR_WITH_SLIDESHOW,
+        FOUR_WITH_TWO_LIVE_IMAGES
     };
+
+    static const uint8_t LIVE_SLOT_COUNT = 6;
 
     IPSClock();
 
@@ -52,6 +57,19 @@ public:
     static ByteConfigItem& getBrightnessConfig() { static ByteConfigItem brightness_config("brightness_config", 255); return brightness_config; }
     static StringConfigItem& getCustomData() { static StringConfigItem custom_data("custom_data", 10, ""); return custom_data; }	// Custom data for MQTT
 
+    static const char* getLiveImageDir();
+    static String getLiveSlotPath(uint8_t slot);
+    static String getLiveSlotCachePath(uint8_t slot);
+    static bool ensureLiveImageDir(fs::FS& fs);
+    static bool isValidLiveSlot(uint8_t slot) { return slot < LIVE_SLOT_COUNT; }
+    static uint32_t getLiveSlotVersion(uint8_t slot);
+    static void markLiveSlotDirty(uint8_t slot);
+    static bool ensureLiveSlotCache(uint8_t slot);
+    static const char* getDisplayPresetName();
+    static const char* getTimeOrDateName();
+    static const char* getFourDigitDisplayName();
+    static bool setDisplayPreset(const String& preset);
+
     void init();
     void loop();
     void checkIconPack();
@@ -65,6 +83,9 @@ public:
     uint8_t getBrightness() { return getDimming() == DIM && !clockOn() ? (brightness / 6) : brightness; }
 private:
     static IRAMPtrArray<const char*> digitToName;
+
+    void drawHHMMWithTwoLiveImages(struct tm& now);
+    void drawSixLiveImages();
 
     byte brightness = 255;
     ClockTimer::Timer displayTimer;
