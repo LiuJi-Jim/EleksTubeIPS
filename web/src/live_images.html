@@ -19,7 +19,7 @@
 
       function liveSlotHtml(slot) {
         var preview = slot.exists
-          ? '<img src="/ips/live/' + slot.slot + '.bmp?v=' + slot.version + '" style="width:67px;height:120px;border:1px solid #aaa;background:#000;">'
+          ? '<img src="/ips/cache/live' + slot.slot + '.bmp?v=' + slot.version + '" style="width:67px;height:120px;border:1px solid #aaa;background:#000;">'
           : '<div style="width:67px;height:120px;border:1px solid #aaa;background:#000;color:#fff;text-align:center;line-height:120px;">empty</div>';
         return '<div style="display:inline-block;vertical-align:top;width:96px;margin:4px;text-align:center;">' +
           '<div><strong>Slot ' + slot.slot + '</strong></div>' + preview +
