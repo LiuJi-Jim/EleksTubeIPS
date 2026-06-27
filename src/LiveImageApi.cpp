@@ -102,7 +102,6 @@ void handleDeleteImage(AsyncWebServerRequest *request) {
     }
 
     LittleFS.remove(IPSClock::getLiveSlotPath(slot));
-    LittleFS.remove(IPSClock::getLiveSlotCachePath(slot));
     invalidateLiveDisplay(slot);
     broadcastFSChange();
     request->send(200, "application/json", "{\"ok\":true}");
