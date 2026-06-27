@@ -59,12 +59,10 @@ public:
 
     static const char* getLiveImageDir();
     static String getLiveSlotPath(uint8_t slot);
-    static String getLiveSlotCachePath(uint8_t slot);
     static bool ensureLiveImageDir(fs::FS& fs);
     static bool isValidLiveSlot(uint8_t slot) { return slot < LIVE_SLOT_COUNT; }
     static uint32_t getLiveSlotVersion(uint8_t slot);
     static void markLiveSlotDirty(uint8_t slot);
-    static bool ensureLiveSlotCache(uint8_t slot);
     static bool setDisplayPreset(const String& preset);
 
     void init();
