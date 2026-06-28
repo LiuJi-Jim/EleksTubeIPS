@@ -8,8 +8,6 @@ extern void broadcastFSChange();
 namespace {
     const char *LIVE_IMAGE_DIR = "/ips/cache";
 
-    uint32_t liveSlotVersion[IPSClock::LIVE_SLOT_COUNT] = {0, 0, 0, 0, 0, 0};
-
     const uint8_t LEFT_TO_RIGHT_DIGITS[IPSClock::LIVE_SLOT_COUNT] = {
         HOURS_TENS,
         HOURS_ONES,
@@ -65,21 +63,10 @@ bool IPSClock::ensureLiveImageDir(fs::FS& fs) {
 }
 
 uint32_t IPSClock::getLiveSlotVersion(uint8_t slot) {
-    if (!isValidLiveSlot(slot)) {
-        return 0;
-    }
-    return liveSlotVersion[slot];
+    return 0;
 }
 
 void IPSClock::markLiveSlotDirty(uint8_t slot) {
-    if (!isValidLiveSlot(slot)) {
-        return;
-    }
-
-    liveSlotVersion[slot]++;
-    if (liveSlotVersion[slot] == 0) {
-        liveSlotVersion[slot] = 1;
-    }
 }
 
 bool IPSClock::setDisplayPreset(const String& preset) {
@@ -243,7 +230,7 @@ void IPSClock::loop() {
                     tfts->setDigit(MINUTES_ONES, digitToName[now.tm_min % 10], TFTs::yes);
                     tfts->setDigit(MINUTES_TENS, digitToName[now.tm_min / 10], TFTs::yes);
                 } else {
-                    if (getFourDigitDisplay() == FOUR) {
+                    if (getFourDigitDisplay() == FOUR || getFourDigitDisplay() == FOUR_WITH_WEATHER) {
                         if (getHourFormat()) {
                             tfts->setDigit(SECONDS_ONES, hour < 12 ? "am" : "pm", TFTs::yes);
                         } else {
