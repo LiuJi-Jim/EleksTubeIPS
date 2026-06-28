@@ -38,9 +38,7 @@
 #define ITEM_FONT   2
 #define TITLE_FONT  4
 
-// Should match what is in the manifest files. Bump version for a release.
 IRAMPtrArray<const char*> manifest {
-	// Firmware name
 #if defined(HARDWARE_PunkCyber_CLOCK)
 	"PCBWay RGB Glow Tube Clock Firmware",
 #elif defined(HARDWARE_Elekstube_CLOCK)
@@ -58,11 +56,8 @@ IRAMPtrArray<const char*> manifest {
 #else
 	"Unknown clock hardware",
 #endif
-	// Firmware version
 	"1.9.5-live-image",
-	// Hardware chip/variant
 	"ESP32",
-	// Device name
 	"IPS Clock"
 };
 
@@ -120,7 +115,6 @@ AsyncWiFiManagerParameter *hostnameParam;
 String ssid("EleksTubeIPS");
 String chipId = getChipId();
 
-// Persistent Configuration
 #if defined(HARDWARE_PunkCyber_CLOCK)
 StringConfigItem hostName("hostname", 63, "punkcyber");
 #elif defined(HARDWARE_Elekstube_CLOCK)
@@ -137,7 +131,6 @@ StringConfigItem hostName("hostname", 63, "ipstube");
 StringConfigItem hostName("hostname", 63, "ipsclock");
 #endif
 
-// Clock config
 IRAMPtrArray<BaseConfigItem*> clockSet {
 	&IPSClock::getDateFormat(),
 	&IPSClock::getTimeOrDate(),
@@ -166,7 +159,6 @@ IRAMPtrArray<BaseConfigItem*> ledSet {
 };
 CompositeConfigItem ledConfig("leds", 0, ledSet);
 
-// Allocate these on the heap to save dram space.
 StringConfigItem *fileSet = new StringConfigItem("file_set", 10, "faces");
 StringConfigItem *slidesSet = new StringConfigItem("slide_show", 25, "anime_female");
 String *oldSlidesSet = new String("anime_female");
@@ -179,14 +171,12 @@ IRAMPtrArray<BaseConfigItem*> faceSet {
 };
 CompositeConfigItem facesConfig("faces", 0, faceSet);
 
-// Global configuration
 IRAMPtrArray<BaseConfigItem*> configSetGlobal = {
 	&hostName,
 	0
 };
 CompositeConfigItem globalConfig("global", 0, configSetGlobal);
 
-// Custom build: weather, MQTT and matrix screen saver have been removed to keep DRAM headroom for Live Image features.
 IRAMPtrArray<BaseConfigItem*> configSetRoot {
 	&globalConfig,
 	&clockConfig,
@@ -196,7 +186,6 @@ IRAMPtrArray<BaseConfigItem*> configSetRoot {
 };
 CompositeConfigItem rootConfig("root", 0, configSetRoot);
 
-// Store the configurations in EEPROM
 EEPROMConfig config(rootConfig);
 
 void asyncTimeSetCallback(String time) {
@@ -421,18 +410,16 @@ WSConfigHandler wsFacesHandler(rootConfig, "faces", clockFacesCallback);
 WSConfigHandler wsNetworkHandler(rootConfig, "network", wifiCallback);
 WSInfoHandler wsInfoHandler(infoCallback);
 
-// Order must match the numbers in WSMenuHandler.cpp. Removed pages keep NULL placeholders.
 IRAMPtrArray<WSHandler*> wsHandlers {
-	&wsMenuHandler,       // 0
-	&wsClockHandler,      // 1
-	&wsLEDHandler,        // 2
-	&wsFacesHandler,      // 3
-	NULL,                 // 4 MQTT removed
-	&wsInfoHandler,       // 5
-	&wsNetworkHandler,    // 6
-	NULL,                 // 7 Weather removed
-	NULL,                 // 8 Matrix screen saver removed
-	NULL,                 // 9 Live Images uses REST only
+	&wsMenuHandler,
+	&wsClockHandler,
+	&wsLEDHandler,
+	&wsFacesHandler,
+	NULL,
+	&wsInfoHandler,
+	&wsNetworkHandler,
+	NULL,
+	NULL,
 	NULL
 };
 
@@ -505,21 +492,26 @@ void updateValue(int screen, String pair) {
 
 void handleWSMsg(AsyncWebSocketClient *client, char *data) {
 	String wholeMsg(data);
-	int code = wholeMsg.substring(0, wholeMsg.indexOf(':')).toInt();
+	int colon = wholeMsg.indexOf(':');
+	int code = wholeMsg.substring(0, colon).toInt();
 
-	if (code < wsHandlers.length()) {
-		if (wsHandlers[code] != NULL) {
+	if (code < 9) {
+		if (code < wsHandlers.length() && wsHandlers[code] != NULL) {
 			wsHandlers[code]->handle(client, data);
 		}
 		return;
 	}
 
-	String message = wholeMsg.substring(wholeMsg.indexOf(':')+1);
+	String message = colon >= 0 ? wholeMsg.substring(colon + 1) : "";
 	if (message.length() == 0) {
 		return;
 	}
-	int screen = message.substring(0, message.indexOf(':')).toInt();
-	String pair = message.substring(message.indexOf(':')+1);
+	int messageColon = message.indexOf(':');
+	if (messageColon < 0) {
+		return;
+	}
+	int screen = message.substring(0, messageColon).toInt();
+	String pair = message.substring(messageColon + 1);
 	updateValue(screen, pair);
 }
 
@@ -867,45 +859,10 @@ void setup() {
 
 	IPSClock::getTimeZone().setCallback(onTimezoneChanged);
 
-	xTaskCreatePinnedToCore(
-		commitEEPROMTaskFn,
-		"Commit EEPROM task",
-		2048,
-		NULL,
-		tskIDLE_PRIORITY,
-		&commitEEPROMTask,
-		xPortGetCoreID()
-	);
-
-	xTaskCreatePinnedToCore(
-		ledTaskFn,
-		"led task",
-		1500,
-		NULL,
-		tskIDLE_PRIORITY + 2,
-		&ledTask,
-		1
-	);
-
-	xTaskCreatePinnedToCore(
-		clockTaskFn,
-		"Clock task",
-		5000,
-		NULL,
-		tskIDLE_PRIORITY + 1,
-		&clockTask,
-		0
-	);
-
-	xTaskCreatePinnedToCore(
-		improvTaskFn,
-		"Improv task",
-		2048,
-		NULL,
-		tskIDLE_PRIORITY + 1,
-		&improvTask,
-		0
-	);
+	xTaskCreatePinnedToCore(commitEEPROMTaskFn, "Commit EEPROM task", 2048, NULL, tskIDLE_PRIORITY, &commitEEPROMTask, xPortGetCoreID());
+	xTaskCreatePinnedToCore(ledTaskFn, "led task", 1500, NULL, tskIDLE_PRIORITY + 2, &ledTask, 1);
+	xTaskCreatePinnedToCore(clockTaskFn, "Clock task", 5000, NULL, tskIDLE_PRIORITY + 1, &clockTask, 0);
+	xTaskCreatePinnedToCore(improvTaskFn, "Improv task", 2048, NULL, tskIDLE_PRIORITY + 1, &improvTask, 0);
 
 	tfts->setStatus("Connecting...");
 
@@ -921,18 +878,8 @@ void setup() {
 	wifiManager->start();
 
 	configureWebServer();
-
 	esp_wifi_set_ps(WIFI_PS_NONE);
-
-	xTaskCreatePinnedToCore(
-		wifiManagerTaskFn,
-		"WiFi Manager task",
-		3000,
-		NULL,
-		tskIDLE_PRIORITY + 2,
-		&wifiManagerTask,
-		0
-	);
+	xTaskCreatePinnedToCore(wifiManagerTaskFn, "WiFi Manager task", 3000, NULL, tskIDLE_PRIORITY + 2, &wifiManagerTask, 0);
 
 	Serial.print("setup() running on core ");
 	Serial.println(xPortGetCoreID());
