@@ -5,14 +5,14 @@
 #include "IPSClock.h"
 #include "TFTs.h"
 
-extern AsyncWebServer *server;
 extern void broadcastUpdate(const BaseConfigItem& item);
 extern void broadcastFSChange();
 
 namespace {
 const size_t MAX_LIVE_IMAGE_BYTES = 256 * 1024;
-bool uploadFailed[IPSClock::LIVE_SLOT_COUNT] = {false, false, false, false, false, false};
-size_t uploadWritten[IPSClock::LIVE_SLOT_COUNT] = {0, 0, 0, 0, 0, 0};
+bool uploadFailed = false;
+uint32_t uploadWritten = 0;
+uint8_t uploadSlot = 255;
 
 bool parseSlot(AsyncWebServerRequest *request, uint8_t &slot) {
     int parsed = request->pathArg(0).toInt();
@@ -114,31 +114,36 @@ void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len,
         return;
     }
 
-    String tmpPath = String(IPSClock::getLiveImageDir()) + "/" + String(slot) + ".tmp";
+    String tmpPath = String(IPSClock::getLiveImageDir()) + "/live" + String(slot) + ".tmp";
     String finalPath = IPSClock::getLiveSlotPath(slot);
 
     if (index == 0) {
         IPSClock::ensureLiveImageDir(LittleFS);
-        uploadFailed[slot] = false;
-        uploadWritten[slot] = 0;
+        uploadFailed = false;
+        uploadWritten = 0;
+        uploadSlot = slot;
         LittleFS.remove(tmpPath);
     }
 
-    if (!uploadFailed[slot]) {
-        if (uploadWritten[slot] + len > MAX_LIVE_IMAGE_BYTES) {
-            uploadFailed[slot] = true;
+    if (uploadSlot != slot) {
+        uploadFailed = true;
+    }
+
+    if (!uploadFailed) {
+        if (uploadWritten + len > MAX_LIVE_IMAGE_BYTES) {
+            uploadFailed = true;
         } else {
             fs::File file = LittleFS.open(tmpPath, index == 0 ? "w" : "a", true);
             if (!file || (len > 0 && file.write(data, len) != len)) {
-                uploadFailed[slot] = true;
+                uploadFailed = true;
             }
             if (file) file.close();
         }
     }
-    uploadWritten[slot] += len;
+    uploadWritten += len;
     if (index + len < total) return;
 
-    if (uploadFailed[slot] || !isBmpHeaderValid(tmpPath)) {
+    if (uploadFailed || !isBmpHeaderValid(tmpPath)) {
         LittleFS.remove(tmpPath);
         sendError(request, 400, "invalid_bmp");
         return;
@@ -160,6 +165,7 @@ void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t l
     if (index + len < total) return;
 
     String body;
+    body.reserve(len);
     for (size_t i = 0; i < len; i++) body += static_cast<char>(data[i]);
     const char *preset = nullptr;
     if (body.indexOf("HHMM_WITH_TWO_LIVE_IMAGES") >= 0) {
@@ -193,8 +199,4 @@ void configureLiveImageApi(AsyncWebServer *server) {
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_PUT, [](AsyncWebServerRequest *request) {}, nullptr, handleUploadBody);
     server->on("/api/display/preset", HTTP_GET, sendPreset);
     server->on("/api/display/preset", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr, handleSetPresetBody);
-}
-
-void initVariant() {
-    configureLiveImageApi(server);
 }
