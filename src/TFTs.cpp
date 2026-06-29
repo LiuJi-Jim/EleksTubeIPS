@@ -814,9 +814,11 @@ bool TFTs::LoadImageBytesIntoSprite(int16_t w, int16_t h, uint8_t bitDepth, int1
           case 32:
             inputPtr++;
           case 24:
-            b = *inputPtr++;
-            g = *inputPtr++;
-            r = *inputPtr++;
+            // BMP stores 24-bit pixels as B, G, R bytes.
+            // Convert 8-bit channels to RGB565 widths before packing below.
+            b = (*inputPtr++) >> 3;
+            g = (*inputPtr++) >> 2;
+            r = (*inputPtr++) >> 3;
             break;
           case 16:
             {
