@@ -157,15 +157,50 @@ void handleDeleteImage(AsyncWebServerRequest *request) {
     request->send(200, "application/json", "{\"ok\":true}");
 }
 
-void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+String getTmpPath(uint8_t slot) {
+    return String(IPSClock::getLiveImageDir()) + "/live" + String(slot) + ".tmp";
+}
+
+void handleUploadDone(AsyncWebServerRequest *request) {
     uint8_t slot;
     if (!parseSlot(request, slot)) {
         sendError(request, 400, "invalid_slot");
         return;
     }
 
-    String tmpPath = String(IPSClock::getLiveImageDir()) + "/live" + String(slot) + ".tmp";
+    String tmpPath = getTmpPath(slot);
     String finalPath = IPSClock::getLiveSlotPath(slot);
+
+    if (uploadFailed || uploadSlot != slot || uploadWritten == 0) {
+        LittleFS.remove(tmpPath);
+        sendError(request, 400, "upload_failed");
+        return;
+    }
+
+    if (!isBmpHeaderValid(tmpPath)) {
+        LittleFS.remove(tmpPath);
+        sendError(request, 400, "invalid_bmp");
+        return;
+    }
+
+    if (!publishUploadedFile(tmpPath, finalPath)) {
+        sendError(request, 500, "publish_failed");
+        return;
+    }
+
+    invalidateLiveDisplay(slot);
+    broadcastFSChange();
+    request->send(200, "application/json", "{\"ok\":true}");
+}
+
+void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    uint8_t slot;
+    if (!parseSlot(request, slot)) {
+        uploadFailed = true;
+        return;
+    }
+
+    String tmpPath = getTmpPath(slot);
 
     if (index == 0) {
         IPSClock::ensureLiveImageDir(LittleFS);
@@ -191,22 +226,6 @@ void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len,
         }
     }
     uploadWritten += len;
-    if (index + len < total) return;
-
-    if (uploadFailed || !isBmpHeaderValid(tmpPath)) {
-        LittleFS.remove(tmpPath);
-        sendError(request, 400, "invalid_bmp");
-        return;
-    }
-
-    if (!publishUploadedFile(tmpPath, finalPath)) {
-        sendError(request, 500, "publish_failed");
-        return;
-    }
-
-    invalidateLiveDisplay(slot);
-    broadcastFSChange();
-    request->send(200, "application/json", "{\"ok\":true}");
 }
 
 void handleSetPresetBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -244,7 +263,7 @@ void configureLiveImageApi(AsyncWebServer *server) {
     if (server == nullptr) return;
     server->on("/api/live/slots", HTTP_GET, handleGetSlots);
     server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_DELETE, handleDeleteImage);
-    server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_PUT, [](AsyncWebServerRequest *request) {}, nullptr, handleUploadBody);
+    server->on("^\\/api\\/live\\/slots\\/([0-5])\\/image$", HTTP_PUT, handleUploadDone, nullptr, handleUploadBody);
     server->on("/api/display/preset", HTTP_GET, sendPreset);
     server->on("/api/display/preset", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr, handleSetPresetBody);
 }
