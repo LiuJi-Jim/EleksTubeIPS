@@ -55,6 +55,56 @@ bool isBmpHeaderValid(const String& path) {
            (bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 || bitDepth == 16 || bitDepth == 24);
 }
 
+bool copyFile(const String& srcPath, const String& dstPath) {
+    fs::File src = LittleFS.open(srcPath, "r");
+    if (!src) {
+        return false;
+    }
+
+    fs::File dst = LittleFS.open(dstPath, "w", true);
+    if (!dst) {
+        src.close();
+        return false;
+    }
+
+    uint8_t buffer[512];
+    bool ok = true;
+    while (src.available()) {
+        size_t readLen = src.read(buffer, sizeof(buffer));
+        if (readLen == 0) {
+            break;
+        }
+        if (dst.write(buffer, readLen) != readLen) {
+            ok = false;
+            break;
+        }
+    }
+
+    src.close();
+    dst.close();
+
+    if (!ok) {
+        LittleFS.remove(dstPath);
+    }
+    return ok;
+}
+
+bool publishUploadedFile(const String& tmpPath, const String& finalPath) {
+    LittleFS.remove(finalPath);
+    if (LittleFS.rename(tmpPath, finalPath)) {
+        return true;
+    }
+
+    if (copyFile(tmpPath, finalPath)) {
+        LittleFS.remove(tmpPath);
+        return true;
+    }
+
+    LittleFS.remove(tmpPath);
+    LittleFS.remove(finalPath);
+    return false;
+}
+
 void invalidateLiveDisplay(uint8_t slot) {
     IPSClock::markLiveSlotDirty(slot);
     if (tfts == nullptr) {
@@ -149,10 +199,8 @@ void handleUploadBody(AsyncWebServerRequest *request, uint8_t *data, size_t len,
         return;
     }
 
-    LittleFS.remove(finalPath);
-    if (!LittleFS.rename(tmpPath, finalPath)) {
-        LittleFS.remove(tmpPath);
-        sendError(request, 500, "rename_failed");
+    if (!publishUploadedFile(tmpPath, finalPath)) {
+        sendError(request, 500, "publish_failed");
         return;
     }
 
